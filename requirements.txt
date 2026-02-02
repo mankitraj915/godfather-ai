@@ -3,4 +3,4 @@ yfinance
 requests
 matplotlib
 numpy
-feedparser
+feedparser   
