@@ -1,6 +1,7 @@
 import os
 import random
 import requests
+import feedparser
 import yfinance as yf
 import google.generativeai as genai
 import matplotlib.pyplot as plt
@@ -13,153 +14,197 @@ LINKEDIN_ID = os.environ.get("LINKEDIN_USER_ID")
 
 genai.configure(api_key=GEMINI_KEY)
 
-# --- 0. THE REPAIRMAN ---
-def get_working_model():
+# --- 0. THE BRAIN STEM ---
+def get_model():
     try:
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
-                if 'gemini' in m.name:
-                    return genai.GenerativeModel(m.name)
+                if 'gemini' in m.name: return genai.GenerativeModel(m.name)
     except: pass
     return genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 1. THE SCOUT ---
-def get_intel():
-    print("📡 SCOUT: Scanning...")
-    intel = None
+# --- CHANNEL 1: TECH & MARKETS ---
+def get_tech_intel():
+    print("📡 CHANNEL: TECH...")
+    intel = {"title": "The Stagnation of Software", "source": "Observation"}
     try:
-        top_ids = requests.get("https://hacker-news.firebaseio.com/v0/topstories.json").json()[:20]
-        for id in top_ids:
-            story = requests.get(f"https://hacker-news.firebaseio.com/v0/item/{id}.json").json()
-            title = story.get('title', '')
-            if any(k in title.lower() for k in ['ai', 'gpt', 'llm', 'nvidia', 'model', 'deepseek']):
-                intel = {"title": title, "source": "Hacker News"}
+        top = requests.get("https://hacker-news.firebaseio.com/v0/topstories.json").json()[:10]
+        for id in top:
+            s = requests.get(f"https://hacker-news.firebaseio.com/v0/item/{id}.json").json()
+            if any(k in s.get('title','').lower() for k in ['ai','gpu','nvidia','crypto','startup']):
+                intel = {"title": s['title'], "source": "Hacker News"}
                 break
     except: pass
-
-    if not intel:
-        intel = {"title": "The Silence of Innovation", "source": "Deep Thought"}
-
-    market = "Market Offline"
+    
+    market = "Flat"
     try:
-        nvda = yf.Ticker("NVDA")
-        hist = nvda.history(period="1d")
+        tick = yf.Ticker("NVDA")
+        hist = tick.history(period="1d")
         if not hist.empty:
-            change = ((hist['Close'].iloc[0] - hist['Open'].iloc[0]) / hist['Open'].iloc[0]) * 100
-            market = f"NVDA {'UP' if change > 0 else 'DOWN'} {abs(change):.2f}%"
+            chg = ((hist['Close'].iloc[0]-hist['Open'].iloc[0])/hist['Open'].iloc[0])*100
+            market = f"NVDA {'UP' if chg>0 else 'DOWN'} {abs(chg):.2f}%"
     except: pass
-        
-    return intel, market
+    return intel, market, "tech"
 
-# --- 2. THE ARTIST ---
-def generate_chart(topic, market):
-    print("🎨 ARTIST: Generating chart...")
+# --- CHANNEL 2: PHILOSOPHY & PSYCHOLOGY ---
+def get_mind_intel():
+    print("📡 CHANNEL: MIND...")
+    topics = [
+        "Jungian Shadow in AI", "Stoicism for Founders", "Vedantic Non-Dualism", 
+        "Nietzsche's Will to Power", "The Lacanian Mirror Stage", "Baudrillard's Hyperreality",
+        "Camus and The Absurd", "Girard's Mimetic Desire", "The Psychology of Flow", "Biocentrism"
+    ]
+    topic = random.choice(topics)
+    return {"title": topic, "source": "Internal Library"}, "Concept", "mind"
+
+# --- CHANNEL 3: UNIVERSAL SCIENCE (Genetics, Neuro, CS, AI) ---
+def get_science_intel():
+    print("📡 CHANNEL: SCIENCE...")
+    
+    # 🎲 THE ACADEMIC ROULETTE 🎲
+    domains = {
+        "genetics": "cat:q-bio.GN",       # Genomics
+        "neuro": "cat:q-bio.NC",          # Neuroscience
+        "ai": "cat:cs.AI",                # Artificial Intelligence
+        "ml": "cat:cs.LG",                # Machine Learning
+        "niche": "cat:cs.CY"              # Computers and Society (Viral/Niche)
+    }
+    
+    domain_name, query_code = random.choice(list(domains.items()))
+    print(f"   -> Domain Selected: {domain_name.upper()}")
+
+    try:
+        # Fetch latest paper from ArXiv
+        url = f'http://export.arxiv.org/api/query?search_query={query_code}&start=0&max_results=5&sortBy=submittedDate&sortOrder=descending'
+        feed = feedparser.parse(url)
+        entry = random.choice(feed.entries)
+        
+        # Clean title
+        title = entry.title.replace('\n', ' ')
+        return {"title": title, "source": f"ArXiv ({domain_name.upper()})"}, domain_name, "science"
+    except:
+        return get_mind_intel() # Fallback
+
+# --- THE ARTIST (Adaptive Visuals) ---
+def generate_chart(mode, sub_mode):
+    print("🎨 ARTIST: Painting...")
     plt.style.use('dark_background')
     fig, ax = plt.subplots(figsize=(10, 5))
     x = np.linspace(0, 10, 100)
-    color = '#00ff41' if "UP" in market else '#ff0055'
-    y = np.sin(x) * np.exp(0.1 * x)
-    if "UP" in market: y += x * 0.1
-    y += np.random.normal(0, 0.1, 100)
-
-    ax.plot(x, y, color=color, linewidth=10, alpha=0.3)
-    ax.plot(x, y, color=color, linewidth=2.5)
-    ax.set_title(f"ANALYSIS: {topic[:30]}... // {market}", color='white')
+    
+    if mode == "tech":
+        # Neon Green Stock Chart
+        y = np.sin(x) * np.exp(0.1*x) + np.random.normal(0, 0.1, 100)
+        color = '#00ff41'
+        
+    elif mode == "mind":
+        # Purple Haze (Philosophy)
+        y = np.sin(x) * np.cos(x*2) * np.exp(0.2*x)
+        color = '#bd00ff'
+        
+    elif mode == "science":
+        # Adaptive Science Colors
+        if sub_mode == "genetics": 
+            color = '#ff0055' # DNA Red
+            y = np.sin(x*3) + np.cos(x*3) # Double Helix-ish
+        elif sub_mode == "neuro":
+            color = '#00d0ff' # Electric Blue
+            y = np.random.normal(0, 0.5, 100) # Neural Spikes
+        else: # AI / CS
+            color = '#ff9900' # Amber Terminal
+            y = np.exp(0.3 * x) # Exponential Growth
+            
+    ax.plot(x, y, color=color, linewidth=8, alpha=0.3) # Glow
+    ax.plot(x, y, color=color, linewidth=2) # Core
+    
+    label = sub_mode if mode == "science" else "ANALYSIS"
+    ax.set_title(f"// SYSTEM OUTPUT: {label.upper()} //", color='white', fontname='monospace')
     ax.axis('off')
     
-    filename = "chart.png"
+    filename = "visual.png"
     plt.savefig(filename, dpi=100, bbox_inches='tight', facecolor='#050505')
     plt.close()
     return filename
 
-# --- 3. THE GODFATHER ---
-def generate_post(intel, market):
-    print("🧠 BRAIN: Writing...")
-    model = get_working_model()
-    prompt = f"""
-    You are a Cynical Deep Tech CTO.
-    NEWS: "{intel['title']}" ({intel['source']})
-    MARKET: {market}
-    Task: Write a LinkedIn post (max 500 chars).
-    - Controversial hook.
-    - Connect news to market.
-    - Tone: Cold, High-Status.
-    """
+# --- THE NARRATOR ---
+def generate_post(intel, sub_mode, mode):
+    print("🧠 BRAIN: Thinking...")
+    model = get_model()
+    
+    if mode == "tech":
+        prompt = f"""
+        Role: Cynical Tech Godfather.
+        Topic: "{intel['title']}" from {intel['source']}.
+        Context: Market is {sub_mode}.
+        Task: Write a LinkedIn post (max 500 chars). Connect news to power/money.
+        """
+    elif mode == "mind":
+        prompt = f"""
+        Role: Modern Philosopher.
+        Topic: "{intel['title']}".
+        Task: Write a LinkedIn post (max 500 chars). Apply this deep concept to modern work/life.
+        Tone: Mystical but actionable.
+        """
+    else: # SCIENCE
+        prompt = f"""
+        Role: R&D Director.
+        Paper: "{intel['title']}" (Source: {intel['source']}).
+        Field: {sub_mode.upper()}.
+        Task: Write a LinkedIn post (max 500 chars). 
+        - If Genetics: Discuss modifying the source code of life.
+        - If Neuro: Discuss the hardware of the mind.
+        - If AI/ML: Discuss the optimization of intelligence.
+        Tone: Visionary, slightly dangerous excitement.
+        """
+
     return model.generate_content(prompt).text.strip()
 
-# --- 4. THE PUBLISHER (FIXED FOR OPENID) ---
+# --- PUBLISHER ---
 def post_to_linkedin(text, image_path):
-    print("🚀 PUBLISHER: Authenticating...")
+    print("🚀 PUBLISHER: Uploading...")
     headers = {"Authorization": f"Bearer {LINKEDIN_TOKEN}", "Content-Type": "application/json"}
     
-    # --- ID FETCH FIX ---
     if not LINKEDIN_ID:
-        # Try Method 1: OpenID (New Standard)
         try:
-            resp = requests.get("https://api.linkedin.com/v2/userinfo", headers=headers)
-            if resp.status_code == 200:
-                profile = resp.json()
-                author_urn = f"urn:li:person:{profile['sub']}"
-            else:
-                # Try Method 2: Classic (Legacy)
-                resp = requests.get("https://api.linkedin.com/v2/me", headers=headers)
-                if resp.status_code == 200:
-                    profile = resp.json()
-                    author_urn = f"urn:li:person:{profile['id']}"
-                else:
-                    print(f"❌ CRITICAL ERROR: Could not fetch User ID. Response: {resp.text}")
-                    return
-        except Exception as e:
-            print(f"❌ CONNECTION ERROR: {e}")
-            return
-    else:
-        author_urn = LINKEDIN_ID
-        
-    print(f"✅ Authenticated as: {author_urn}")
+            r = requests.get("https://api.linkedin.com/v2/userinfo", headers=headers)
+            if r.status_code == 200: urn = f"urn:li:person:{r.json()['sub']}"
+            else: urn = f"urn:li:person:{requests.get('https://api.linkedin.com/v2/me', headers=headers).json()['id']}"
+        except: return print("❌ Auth Failed")
+    else: urn = LINKEDIN_ID
 
-    # Register Image
     reg = requests.post("https://api.linkedin.com/v2/assets?action=registerUpload", headers=headers, json={
         "registerUploadRequest": {
             "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-            "owner": author_urn,
+            "owner": urn,
             "serviceRelationships": [{"relationshipType": "OWNER", "identifier": "urn:li:userGeneratedContent"}]
         }
     })
-    
-    if reg.status_code != 200:
-        print(f"❌ Image Register Error: {reg.text}")
-        return
-
     upload_url = reg.json()['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']['uploadUrl']
     asset_urn = reg.json()['value']['asset']
-
-    # Upload Binary
-    with open(image_path, 'rb') as f:
-        requests.put(upload_url, headers={"Authorization": f"Bearer {LINKEDIN_TOKEN}"}, data=f)
-
-    # Publish
-    post_body = {
-        "author": author_urn,
-        "lifecycleState": "PUBLISHED",
-        "specificContent": {
-            "com.linkedin.ugc.ShareContent": {
-                "shareCommentary": {"text": text},
-                "shareMediaCategory": "IMAGE",
-                "media": [{"status": "READY", "media": asset_urn, "title": {"text": "Analysis"}}]
-            }
-        },
-        "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
-    }
     
-    final = requests.post("https://api.linkedin.com/v2/ugcPosts", headers=headers, json=post_body)
-    if final.status_code == 201:
-        print("✅ GODFATHER HAS SPOKEN.")
-    else:
-        print(f"❌ Post Failed: {final.text}")
+    with open(image_path, 'rb') as f: requests.put(upload_url, headers={"Authorization": f"Bearer {LINKEDIN_TOKEN}"}, data=f)
 
-# --- RUN ---
+    requests.post("https://api.linkedin.com/v2/ugcPosts", headers=headers, json={
+        "author": urn,
+        "lifecycleState": "PUBLISHED",
+        "specificContent": {"com.linkedin.ugc.ShareContent": {
+            "shareCommentary": {"text": text},
+            "shareMediaCategory": "IMAGE",
+            "media": [{"status": "READY", "media": asset_urn, "title": {"text": "Insight"}}]
+        }},
+        "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
+    })
+    print("✅ GODFATHER HAS SPOKEN.")
+
+# --- MAIN LOOP ---
 if __name__ == "__main__":
-    intel, market = get_intel()
-    chart = generate_chart(intel['title'], market)
-    post = generate_post(intel, market)
+    # 40% Chance Tech, 40% Chance Science, 20% Chance Philosophy
+    choice = random.choices(["tech", "science", "mind"], weights=[40, 40, 20], k=1)[0]
+    
+    if choice == "tech": intel, extra, mode = get_tech_intel()
+    elif choice == "mind": intel, extra, mode = get_mind_intel()
+    else: intel, extra, mode = get_science_intel()
+    
+    chart = generate_chart(mode, extra)
+    post = generate_post(intel, extra, mode)
     post_to_linkedin(post, chart)
