@@ -2,8 +2,9 @@ name: The Godfather Protocol
 
 on:
   schedule:
-    - cron: '0 13 * * *' # Runs at 1 PM UTC daily
-  workflow_dispatch: # Allows manual click to run
+    # Runs 6 times a day: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC
+    - cron: '0 0,4,8,12,16,20 * * *'
+  workflow_dispatch:
 
 jobs:
   dominate:
