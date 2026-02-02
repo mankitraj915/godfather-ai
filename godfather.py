@@ -22,67 +22,69 @@ CURRENT_KEY_INDEX = 0
 LINKEDIN_TOKEN = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_ID = os.environ.get("LINKEDIN_USER_ID")
 
-# --- 0. THE BARE METAL ENGINE (Direct API Calls) ---
+# --- 0. THE BARE METAL ENGINE (Dual-Version) ---
 def generate_text_bare_metal(prompt):
     global CURRENT_KEY_INDEX
     if not VALID_KEYS: 
-        print("❌ Error: No API Keys found in Environment.")
+        print("❌ Error: No API Keys found.")
         return None
 
-    # List of models to hit directly (URL endpoints)
-    # We include legacy and experimental models to ensure one hits.
+    # STRATEGY: Try strict versions first, then aliases.
+    # We also toggle between 'v1beta' and 'v1' endpoints.
     models = [
         "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-001",
         "gemini-1.5-pro",
-        "gemini-1.5-pro-latest",
-        "gemini-1.0-pro",
-        "gemini-pro"
+        "gemini-1.5-pro-001",
+        "gemini-pro",
+        "gemini-1.0-pro"
     ]
+    
+    versions = ["v1beta", "v1"]
 
-    # Try up to 20 times (Keys * Models)
-    for attempt in range(20):
+    # Try up to 30 times (Keys * Versions * Models)
+    for attempt in range(30):
         key = VALID_KEYS[CURRENT_KEY_INDEX]
         
-        for model in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-            headers = {'Content-Type': 'application/json'}
-            
-            # CRITICAL: Disable Safety Settings to prevent "Blocked" responses on intellectual topics
-            data = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "safetySettings": [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-                ]
-            }
-            
-            try:
-                # print(f"   ... Pinging {model} on Key #{CURRENT_KEY_INDEX+1}...")
-                response = requests.post(url, headers=headers, json=data, timeout=30)
+        for version in versions:
+            for model in models:
+                # Construct URL dynamically based on version
+                url = f"https://generativelanguage.googleapis.com/{version}/models/{model}:generateContent?key={key}"
+                headers = {'Content-Type': 'application/json'}
                 
-                if response.status_code == 200:
-                    try:
-                        return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-                    except Exception as e:
-                        # If 200 OK but no text, it might be a safety finishReason we missed or malformed json
-                        # print(f"   ... 200 OK but parse failed: {e}")
-                        continue 
-                elif response.status_code == 429:
-                    print(f"⚠️ Key #{CURRENT_KEY_INDEX+1} Quota Exceeded (429).")
-                    break # Break inner loop to rotate key
-                else:
-                    # DEBUG PRINT: If this fails, we want to know WHY.
-                    print(f"⚠️ Error {response.status_code} on {model}: {response.text[:200]}")
-                    continue # Try next model
+                # Safety Settings set to BLOCK_NONE to avoid 400/403 on intellectual topics
+                data = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "safetySettings": [
+                        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+                    ]
+                }
+                
+                try:
+                    # print(f"   ... Trying {version}/{model} on Key #{CURRENT_KEY_INDEX+1}...")
+                    response = requests.post(url, headers=headers, json=data, timeout=30)
                     
-            except Exception as e:
-                print(f"⚠️ Connection Error: {e}")
-                continue
+                    if response.status_code == 200:
+                        try:
+                            return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                        except:
+                            # If 200 OK but parse fails, likely a safety filter triggered silently
+                            continue 
+                    elif response.status_code == 429:
+                        print(f"⚠️ Key #{CURRENT_KEY_INDEX+1} Quota Exceeded.")
+                        break # Break model loop to rotate key
+                    elif response.status_code == 404:
+                        continue # Model not found in this version, try next
+                    else:
+                        continue # Other error, try next
+                        
+                except Exception as e:
+                    continue
 
-        # If we broke out of the model loop (usually due to 429), rotate keys
+        # Rotate Key if we exhausted models/versions for the current key
         if len(VALID_KEYS) > 1:
             CURRENT_KEY_INDEX = (CURRENT_KEY_INDEX + 1) % len(VALID_KEYS)
             print(f"🔄 Switching to API Key #{CURRENT_KEY_INDEX + 1}...")
@@ -90,7 +92,7 @@ def generate_text_bare_metal(prompt):
             
     return None
 
-# --- 1. DEPARTMENT OF INTELLIGENCE ---
+# --- 1. INTELLIGENCE ---
 def get_intel():
     choice = random.choice(["humanities", "science", "tech"])
     
@@ -115,7 +117,7 @@ def get_intel():
         print("📡 CHANNEL: TECH POWER...")
         return {"title": "The Stagnation of Software Innovation", "source": "Market Observation"}, "SYSTEMS", "tech"
 
-# --- THE ARTIST: CHAOS THEORY (Clifford Attractors) ---
+# --- THE ARTIST: CHAOS THEORY ---
 def generate_chart(mode, sub_mode, text_content):
     print("🎨 ARTIST: Rendering Chaos...")
     plt.style.use('dark_background')
@@ -123,26 +125,22 @@ def generate_chart(mode, sub_mode, text_content):
     fig.patch.set_facecolor('#050505')
     ax.set_facecolor('#050505')
 
-    # GENERATE CHAOS PARTICLES
     n_points = 50000
     
-    # Parameters based on "Vibe"
     if mode == "humanities":
-        a, b, c, d = -1.4, 1.6, 1.0, 0.7 # Ghostly Magma
+        a, b, c, d = -1.4, 1.6, 1.0, 0.7 
         color_map = 'magma' 
     elif mode == "science":
-        a, b, c, d = 1.7, 1.7, 0.6, 1.2 # Quantum Cyan
+        a, b, c, d = 1.7, 1.7, 0.6, 1.2
         color_map = 'cyan'
     else: 
-        a, b, c, d = -1.8, -2.0, -0.5, -0.9 # Matrix Green
+        a, b, c, d = -1.8, -2.0, -0.5, -0.9
         color_map = 'spring'
 
-    # Mathematical Simulation
     t = np.linspace(0, 10, n_points)
     x = np.sin(t*a) * np.cos(t*b) * t
     y = np.sin(t*c) * np.sin(t*d) * t
     
-    # Plotting
     if color_map == 'cyan': color = '#00EAFF'
     elif color_map == 'magma': color = '#FF0055'
     else: color = '#00FF41'
@@ -150,11 +148,10 @@ def generate_chart(mode, sub_mode, text_content):
     ax.plot(x, y, ',', color=color, alpha=0.3) 
     ax.plot(x[:200], y[:200], '-', color='white', linewidth=0.5, alpha=0.5) 
     
-    # CRYPTOGRAPHIC SIGNATURE
     if text_content:
         post_hash = hashlib.sha256(text_content.encode()).hexdigest()[:16]
     else:
-        post_hash = "ERROR_NULL_DATA"
+        post_hash = "GEN_ERR"
 
     font = {'fontname': 'monospace', 'weight': 'bold'}
     ax.text(0.5, 0.95, f"// SYSTEM: {sub_mode} //", transform=ax.transAxes, fontsize=20, color='white', ha='center', alpha=0.8, **font)
@@ -236,4 +233,4 @@ if __name__ == "__main__":
         chart = generate_chart(mode, sub_mode, post)
         post_to_linkedin(post, chart)
     else:
-        print("❌ System Failure: No text generated after trying all keys and models.")
+        print("❌ System Failure: All models exhausted.")
