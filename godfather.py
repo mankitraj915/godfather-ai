@@ -40,7 +40,6 @@ def get_working_model_config(key):
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                # Find models that support text generation
                 valid_models = []
                 for m in data.get('models', []):
                     if 'generateContent' in m.get('supportedGenerationMethods', []):
@@ -49,7 +48,9 @@ def get_working_model_config(key):
                 
                 if valid_models:
                     print(f"   ✅ Found Models in {version}: {valid_models[:3]}...")
-                    # Priority Selection
+                    # Priority Selection (Newer models first)
+                    for m in valid_models: 
+                        if '2.5' in m: return version, m # Catch the new Gemini 2.5
                     for m in valid_models: 
                         if 'flash' in m and '1.5' in m: return version, m
                     for m in valid_models: 
@@ -58,7 +59,6 @@ def get_working_model_config(key):
         except:
             continue
 
-    # EMERGENCY FALLBACK (Blind Guess)
     return "v1beta", "gemini-1.5-flash"
 
 def generate_text_bare_metal(prompt):
@@ -90,7 +90,18 @@ def generate_text_bare_metal(prompt):
             
             if response.status_code == 200:
                 try:
-                    return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                    raw_text = response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                    # --- SAFETY RAZOR (TRUNCATION) ---
+                    # 1. Remove "Here is a post" filler if present
+                    if "Here is" in raw_text[:20]:
+                        raw_text = raw_text.split("\n", 1)[-1].strip()
+                    
+                    # 2. Hard limit to 2800 chars (LinkedIn limit is 3000)
+                    if len(raw_text) > 2800:
+                        print("   ⚠️ Trimming text to 2800 chars...")
+                        raw_text = raw_text[:2800] + "..."
+                    
+                    return raw_text
                 except:
                     print("   ⚠️ 200 OK but JSON malformed.")
                     continue
@@ -102,7 +113,6 @@ def generate_text_bare_metal(prompt):
                     time.sleep(10)
             else:
                 print(f"   ❌ Error {response.status_code}: {response.text[:100]}")
-                # Rotate key on 400/403 errors
                 if len(VALID_KEYS) > 1:
                     CURRENT_KEY_INDEX = (CURRENT_KEY_INDEX + 1) % len(VALID_KEYS)
 
@@ -145,6 +155,29 @@ def generate_chart(mode, sub_mode, text_content):
     plt.savefig(filename, dpi=150, bbox_inches='tight', facecolor='#050505')
     plt.close()
     return filename
+
+# --- NARRATOR (STRICT MODE) ---
+def generate_post(intel, sub_mode, mode):
+    print("🧠 BRAIN: Calculating...")
+    
+    # STRICT INSTRUCTIONS TO PREVENT "OPTIONS"
+    base_instructions = """
+    Write EXACTLY ONE LinkedIn essay (max 2000 chars).
+    DO NOT provide options (Option 1, Option 2).
+    DO NOT write intro text like "Here is a post".
+    Start directly with the Hook/Title.
+    
+    Style: High-IQ, Polymathic, Visionary.
+    Structure:
+    1. THE THESIS (Hook)
+    2. THE ANTITHESIS (Conflict)
+    3. THE SYNTHESIS (Insight)
+    4. THE PRAXIS (Lesson)
+    """
+    
+    prompt = f"""{base_instructions} Role: Intellectual Titan. Topic: "{intel['title']}". Context: {sub_mode}."""
+    
+    return generate_text_bare_metal(prompt)
 
 # --- PUBLISHER ---
 def post_to_linkedin(text, image_path):
@@ -195,7 +228,7 @@ def post_to_linkedin(text, image_path):
 
 if __name__ == "__main__":
     intel, sub_mode, mode = get_intel()
-    post = generate_text_bare_metal("Write a LinkedIn post about AI.")
+    post = generate_post(intel, sub_mode, mode)
     
     if post:
         chart = generate_chart(mode, sub_mode, post)
