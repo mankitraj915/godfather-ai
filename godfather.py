@@ -153,5 +153,5 @@ if __name__ == "__main__":
     chart = generate_chart(intel['title'], market)
     post = generate_post(intel, market)
     # UNCOMMENT THIS WHEN YOU ADD LINKEDIN KEYS
-    # post_to_linkedin(post, chart) 
+    post_to_linkedin(post, chart) 
     print(f"DONE: {post}")
