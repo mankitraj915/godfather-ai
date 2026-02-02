@@ -22,69 +22,62 @@ CURRENT_KEY_INDEX = 0
 LINKEDIN_TOKEN = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_ID = os.environ.get("LINKEDIN_USER_ID")
 
-# --- 0. THE BARE METAL ENGINE (Dual-Version) ---
+# --- 0. THE BARE METAL ENGINE (Strict Protocol) ---
 def generate_text_bare_metal(prompt):
     global CURRENT_KEY_INDEX
     if not VALID_KEYS: 
         print("❌ Error: No API Keys found.")
         return None
 
-    # STRATEGY: Try strict versions first, then aliases.
-    # We also toggle between 'v1beta' and 'v1' endpoints.
-    models = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-001",
-        "gemini-1.5-pro",
-        "gemini-1.5-pro-001",
-        "gemini-pro",
-        "gemini-1.0-pro"
-    ]
+    # The most stable model currently
+    models = ["gemini-1.5-flash"]
     
-    versions = ["v1beta", "v1"]
-
-    # Try up to 30 times (Keys * Versions * Models)
-    for attempt in range(30):
+    # Try up to 20 times (Keys * Models)
+    for attempt in range(20):
         key = VALID_KEYS[CURRENT_KEY_INDEX]
         
-        for version in versions:
-            for model in models:
-                # Construct URL dynamically based on version
-                url = f"https://generativelanguage.googleapis.com/{version}/models/{model}:generateContent?key={key}"
-                headers = {'Content-Type': 'application/json'}
+        for model in models:
+            # OFFICIAL V1BETA ENDPOINT
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+            headers = {'Content-Type': 'application/json'}
+            
+            # STRICT PAYLOAD STRUCTURE
+            data = {
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }]
+            }
+            
+            try:
+                # TIMEOUT INCREASED TO 60s
+                response = requests.post(url, headers=headers, json=data, timeout=60)
                 
-                # Safety Settings set to BLOCK_NONE to avoid 400/403 on intellectual topics
-                data = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "safetySettings": [
-                        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-                    ]
-                }
-                
-                try:
-                    # print(f"   ... Trying {version}/{model} on Key #{CURRENT_KEY_INDEX+1}...")
-                    response = requests.post(url, headers=headers, json=data, timeout=30)
-                    
-                    if response.status_code == 200:
-                        try:
-                            return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-                        except:
-                            # If 200 OK but parse fails, likely a safety filter triggered silently
-                            continue 
-                    elif response.status_code == 429:
-                        print(f"⚠️ Key #{CURRENT_KEY_INDEX+1} Quota Exceeded.")
-                        break # Break model loop to rotate key
-                    elif response.status_code == 404:
-                        continue # Model not found in this version, try next
-                    else:
-                        continue # Other error, try next
-                        
-                except Exception as e:
-                    continue
+                if response.status_code == 200:
+                    try:
+                        return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                    except KeyError:
+                        print(f"⚠️ Key #{CURRENT_KEY_INDEX+1}: 200 OK but malformed response.")
+                        continue 
+                    except IndexError:
+                        print(f"⚠️ Key #{CURRENT_KEY_INDEX+1}: 200 OK but blocked (Safety).")
+                        continue
 
-        # Rotate Key if we exhausted models/versions for the current key
+                elif response.status_code == 429:
+                    print(f"⚠️ Key #{CURRENT_KEY_INDEX+1} Quota Exceeded (429).")
+                    break # Rotate Key
+                elif response.status_code == 404:
+                    print(f"⚠️ Key #{CURRENT_KEY_INDEX+1} Model Not Found (404).")
+                    continue
+                else:
+                    # PRINT THE REAL ERROR
+                    print(f"⚠️ Key #{CURRENT_KEY_INDEX+1} Error {response.status_code}: {response.text[:200]}")
+                    break # Move to next key if auth failed
+                    
+            except Exception as e:
+                print(f"⚠️ Network Error: {e}")
+                continue
+
+        # Rotate Key
         if len(VALID_KEYS) > 1:
             CURRENT_KEY_INDEX = (CURRENT_KEY_INDEX + 1) % len(VALID_KEYS)
             print(f"🔄 Switching to API Key #{CURRENT_KEY_INDEX + 1}...")
