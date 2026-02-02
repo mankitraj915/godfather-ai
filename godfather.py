@@ -7,7 +7,7 @@ import yfinance as yf
 import google.generativeai as genai
 import matplotlib.pyplot as plt
 import numpy as np
-from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
+from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable, NotFound
 
 # --- CONFIGURATION: THE DECA-HYDRA (10 KEYS) ---
 KEYS = []
@@ -22,20 +22,36 @@ CURRENT_KEY_INDEX = 0
 LINKEDIN_TOKEN = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_ID = os.environ.get("LINKEDIN_USER_ID")
 
-# --- 0. THE ROTATING BRAIN ---
-def get_working_model():
+# --- 0. THE ROTATING BRAIN (MODEL HUNTER) ---
+def get_working_model_and_key():
     global CURRENT_KEY_INDEX
-    if not VALID_KEYS: return None
+    if not VALID_KEYS: return None, None
+    
+    # ROTATE KEY
     key = VALID_KEYS[CURRENT_KEY_INDEX]
     genai.configure(api_key=key)
-    return genai.GenerativeModel('gemini-1.5-flash')
+    
+    # LIST OF MODELS TO TRY (In order of speed/quality)
+    # The code will try these one by one until it finds a survivor.
+    model_candidates = [
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-001',
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro',
+        'gemini-1.5-pro-latest',
+        'gemini-pro', 
+        'gemini-1.0-pro'
+    ]
+    
+    # Return the class, let the generation step handle the specific model string
+    # We will pick a specific model string dynamically in the generate function
+    return genai, model_candidates
 
 def rotate_key():
     global CURRENT_KEY_INDEX
     if len(VALID_KEYS) > 1:
         CURRENT_KEY_INDEX = (CURRENT_KEY_INDEX + 1) % len(VALID_KEYS)
         print(f"🔄 Switching to API Key #{CURRENT_KEY_INDEX + 1}...")
-        genai.configure(api_key=VALID_KEYS[CURRENT_KEY_INDEX])
 
 # --- 1. DEPARTMENT OF PHILOSOPHY & PSYCHOANALYSIS ---
 def get_humanities_intel():
@@ -57,7 +73,6 @@ def get_humanities_intel():
             "Capitalist Realism (Mark Fisher)", "Accelerationism (e/acc)"
         ]
     }
-    # Pick a random sub-field
     field = random.choice(list(library.keys()))
     topic = random.choice(library[field])
     return {"title": topic, "source": "Academic Canon"}, field.upper(), "humanities"
@@ -66,20 +81,16 @@ def get_humanities_intel():
 def get_science_intel():
     print("📡 CHANNEL: DEEP SCIENCE...")
     domains = {
-        "quantum_physics": "cat:quant-ph",  # Quantum Mechanics
-        "astrophysics": "cat:astro-ph",     # Astrophysics
-        "condensed_matter": "cat:cond-mat", # Material Science
-        "game_theory": "cat:cs.GT",         # Math/Econ
-        "complexity": "cat:nlin.AO",        # Chaos Theory
-        "genetics": "cat:q-bio.GN",         # Biology
-        "neuroscience": "cat:q-bio.NC"      # Brain
+        "quantum_physics": "cat:quant-ph",  "astrophysics": "cat:astro-ph",
+        "condensed_matter": "cat:cond-mat", "game_theory": "cat:cs.GT",
+        "complexity": "cat:nlin.AO",        "genetics": "cat:q-bio.GN",
+        "neuroscience": "cat:q-bio.NC"
     }
     
     domain_name, query_code = random.choice(list(domains.items()))
     print(f"   -> Field: {domain_name.upper()}")
 
     try:
-        # Fetch fresh paper
         url = f'http://export.arxiv.org/api/query?search_query={query_code}&start=0&max_results=10&sortBy=submittedDate&sortOrder=descending'
         feed = feedparser.parse(url)
         entry = random.choice(feed.entries)
@@ -102,42 +113,32 @@ def get_tech_intel():
     except: pass
     return intel, "MARKET FORCES", "tech"
 
-# --- THE ARTIST: ACADEMIC AESTHETIC ---
+# --- THE ARTIST ---
 def generate_chart(mode, sub_mode):
     print("🎨 ARTIST: Visualizing Concept...")
     plt.style.use('dark_background')
     fig, ax = plt.subplots(figsize=(10, 10))
-    
     x = np.linspace(0, 10, 300)
     
     if mode == "humanities":
-        # Abstract Chaos (Purple/Red)
         y = np.sin(x) * np.cos(x*2.5) * np.exp(0.1*x)
-        color, glow = '#BD00FF', '#FF0055' # Purple + Red
+        color, glow = '#BD00FF', '#FF0055' 
         label = "CONCEPT"
-        
     elif mode == "science":
-        # Structured Data (Cyan/White)
         y = np.sin(x**2) + np.random.normal(0, 0.2, 300)
-        color, glow = '#00EAFF', '#FFFFFF' # Cyan + White
+        color, glow = '#00EAFF', '#FFFFFF' 
         label = "DATA"
-        
-    else: # Tech
-        # Market Growth (Green/Amber)
+    else: 
         y = np.exp(0.25*x) + np.sin(x*5)*0.5
-        color, glow = '#00FF41', '#FF9900' # Matrix Green + Amber
+        color, glow = '#00FF41', '#FF9900' 
         label = "SIGNAL"
 
-    # The "Dopamine Glow"
     ax.fill_between(x, y, -5, color=glow, alpha=0.1)
     ax.plot(x, y, color=color, linewidth=3, alpha=0.9)
-    ax.plot(x, y, color='#FFFFFF', linewidth=0.5, alpha=0.6) # Core
-    
-    # Overlay High-IQ Text
+    ax.plot(x, y, color='#FFFFFF', linewidth=0.5, alpha=0.6)
     ax.text(5, 0, f"{sub_mode} // {label}", fontsize=20, color='white', ha='center', alpha=0.2, fontname='monospace', weight='bold')
     ax.set_xlim(0, 10)
     ax.axis('off')
-    
     filename = "visual.png"
     plt.savefig(filename, dpi=120, bbox_inches='tight', facecolor='#050505')
     plt.close()
@@ -147,39 +148,51 @@ def generate_chart(mode, sub_mode):
 def generate_post(intel, sub_mode, mode):
     print("🧠 BRAIN: Synthesizing Manifesto...")
     
-    # The Prompt for Maximum Intellectual Authority
     base_instructions = """
     Write a DEEP, ACADEMIC, yet VIRAL LinkedIn essay (1500+ chars).
     Style: High-IQ, Polymathic, Visionary.
     Structure:
-    1. THE THESIS (The Hook): A sophisticated, contrarian definition of the topic.
-    2. THE ANTITHESIS (The Conflict): Why the current mainstream understanding is wrong or shallow.
-    3. THE SYNTHESIS (The Insight): Apply this deep concept to modern technology, markets, or human behavior.
-    4. THE PRAXIS (The Lesson): How to use this mental model to win.
-    Format: Use BOLD headers. Use precise academic terminology but explain it clearly.
+    1. THE THESIS (Hook): A sophisticated, contrarian definition.
+    2. THE ANTITHESIS (Conflict): Why the mainstream view is shallow.
+    3. THE SYNTHESIS (Insight): Apply this to modern tech/life.
+    4. THE PRAXIS (Lesson): How to win.
+    Format: BOLD headers. Precise terminology.
     """
     
     if mode == "humanities":
-        prompt = f"""{base_instructions} Role: Philosopher-King. Topic: "{intel['title']}". Context: {sub_mode}. Explain this concept and apply it to the modern crisis of meaning or productivity."""
+        prompt = f"""{base_instructions} Role: Philosopher-King. Topic: "{intel['title']}". Context: {sub_mode}. Explain this concept and apply it to the modern crisis of meaning."""
     elif mode == "science":
-        prompt = f"""{base_instructions} Role: Director of Deep Science. Paper: "{intel['title']}" ({intel['source']}). Field: {sub_mode}. Explain the breakthrough and its massive future implications for humanity."""
-    else: # Tech
-        prompt = f"""{base_instructions} Role: Technocrat VC. News: "{intel['title']}". Context: {sub_mode}. Analyze the second-order effects of this event on power and money."""
+        prompt = f"""{base_instructions} Role: Director of Deep Science. Paper: "{intel['title']}" ({intel['source']}). Field: {sub_mode}. Explain the breakthrough and its massive implications."""
+    else: 
+        prompt = f"""{base_instructions} Role: Technocrat VC. News: "{intel['title']}". Context: {sub_mode}. Analyze the second-order effects on power."""
 
-    # Hydra Retry Loop
-    for attempt in range(10):
+    # --- ROBUST TRY/CATCH LOOP ---
+    # We try up to 15 times (Keys * Models)
+    for attempt in range(15):
         try:
-            model = get_working_model()
-            if not model: return None
-            response = model.generate_content(prompt)
-            if response.text: return response.text.strip()
-        except (ResourceExhausted, ServiceUnavailable):
-            print(f"⚠️ Key #{CURRENT_KEY_INDEX + 1} Burned Out.")
+            client, candidates = get_working_model_and_key()
+            if not client: return None
+            
+            # INNER LOOP: Try every model name on the current key
+            for model_name in candidates:
+                try:
+                    print(f"   ... Trying model: {model_name}")
+                    model = client.GenerativeModel(model_name)
+                    response = model.generate_content(prompt)
+                    if response.text: 
+                        return response.text.strip() # SUCCESS!
+                except Exception as inner_e:
+                    # If model not found, try next model name silently
+                    continue 
+            
+            # If all models failed on this key, throw error to trigger key rotation
+            raise Exception("All models failed on this key")
+            
+        except (ResourceExhausted, ServiceUnavailable, Exception) as e:
+            print(f"⚠️ Key #{CURRENT_KEY_INDEX + 1} Failed. Rotating...")
             rotate_key()
             time.sleep(2)
-        except Exception as e:
-            print(f"⚠️ Error: {e}")
-            return None
+
     return None
 
 # --- PUBLISHER ---
@@ -225,9 +238,7 @@ def post_to_linkedin(text, image_path):
 
 # --- MAIN LOOP ---
 if __name__ == "__main__":
-    # Equal Weighting across the 3 Intellectual Spheres
     choice = random.choice(["humanities", "science", "tech"])
-    
     if choice == "humanities": intel, sub_mode, mode = get_humanities_intel()
     elif choice == "science": intel, sub_mode, mode = get_science_intel()
     else: intel, sub_mode, mode = get_tech_intel()
