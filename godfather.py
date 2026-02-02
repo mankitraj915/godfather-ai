@@ -6,7 +6,7 @@ import google.generativeai as genai
 import matplotlib.pyplot as plt
 import numpy as np
 
-# --- CONFIGURATION (Reads from GitHub Secrets) ---
+# --- CONFIGURATION ---
 GEMINI_KEY = os.environ["GEMINI_API_KEY"]
 LINKEDIN_TOKEN = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_ID = os.environ.get("LINKEDIN_USER_ID")
@@ -15,7 +15,6 @@ genai.configure(api_key=GEMINI_KEY)
 
 # --- 0. THE REPAIRMAN ---
 def get_working_model():
-    # Tries to find the best model available
     try:
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
@@ -28,8 +27,6 @@ def get_working_model():
 def get_intel():
     print("📡 SCOUT: Scanning...")
     intel = None
-    
-    # Try Hacker News
     try:
         top_ids = requests.get("https://hacker-news.firebaseio.com/v0/topstories.json").json()[:20]
         for id in top_ids:
@@ -40,11 +37,9 @@ def get_intel():
                 break
     except: pass
 
-    # Fallback to simulated logic if scrape fails
     if not intel:
         intel = {"title": "The Silence of Innovation", "source": "Deep Thought"}
 
-    # Market Check
     market = "Market Offline"
     try:
         nvda = yf.Ticker("NVDA")
@@ -61,17 +56,14 @@ def generate_chart(topic, market):
     print("🎨 ARTIST: Generating chart...")
     plt.style.use('dark_background')
     fig, ax = plt.subplots(figsize=(10, 5))
-    
     x = np.linspace(0, 10, 100)
     color = '#00ff41' if "UP" in market else '#ff0055'
     y = np.sin(x) * np.exp(0.1 * x)
     if "UP" in market: y += x * 0.1
-    y += np.random.normal(0, 0.1, 100) # Noise
+    y += np.random.normal(0, 0.1, 100)
 
-    # Glow effect
     ax.plot(x, y, color=color, linewidth=10, alpha=0.3)
     ax.plot(x, y, color=color, linewidth=2.5)
-    
     ax.set_title(f"ANALYSIS: {topic[:30]}... // {market}", color='white')
     ax.axis('off')
     
@@ -89,23 +81,41 @@ def generate_post(intel, market):
     NEWS: "{intel['title']}" ({intel['source']})
     MARKET: {market}
     Task: Write a LinkedIn post (max 500 chars).
-    - Start with a controversial hook.
-    - Connect the news to the market.
-    - Tone: Cold, Technical, High-Status.
+    - Controversial hook.
+    - Connect news to market.
+    - Tone: Cold, High-Status.
     """
     return model.generate_content(prompt).text.strip()
 
-# --- 4. THE PUBLISHER ---
+# --- 4. THE PUBLISHER (FIXED FOR OPENID) ---
 def post_to_linkedin(text, image_path):
-    print("🚀 PUBLISHER: Uploading...")
+    print("🚀 PUBLISHER: Authenticating...")
     headers = {"Authorization": f"Bearer {LINKEDIN_TOKEN}", "Content-Type": "application/json"}
     
-    # Get User ID
+    # --- ID FETCH FIX ---
     if not LINKEDIN_ID:
-        profile = requests.get("https://api.linkedin.com/v2/me", headers=headers).json()
-        author_urn = f"urn:li:person:{profile['id']}"
+        # Try Method 1: OpenID (New Standard)
+        try:
+            resp = requests.get("https://api.linkedin.com/v2/userinfo", headers=headers)
+            if resp.status_code == 200:
+                profile = resp.json()
+                author_urn = f"urn:li:person:{profile['sub']}"
+            else:
+                # Try Method 2: Classic (Legacy)
+                resp = requests.get("https://api.linkedin.com/v2/me", headers=headers)
+                if resp.status_code == 200:
+                    profile = resp.json()
+                    author_urn = f"urn:li:person:{profile['id']}"
+                else:
+                    print(f"❌ CRITICAL ERROR: Could not fetch User ID. Response: {resp.text}")
+                    return
+        except Exception as e:
+            print(f"❌ CONNECTION ERROR: {e}")
+            return
     else:
         author_urn = LINKEDIN_ID
+        
+    print(f"✅ Authenticated as: {author_urn}")
 
     # Register Image
     reg = requests.post("https://api.linkedin.com/v2/assets?action=registerUpload", headers=headers, json={
@@ -117,7 +127,7 @@ def post_to_linkedin(text, image_path):
     })
     
     if reg.status_code != 200:
-        print(f"❌ Upload Error: {reg.text}")
+        print(f"❌ Image Register Error: {reg.text}")
         return
 
     upload_url = reg.json()['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']['uploadUrl']
@@ -152,6 +162,4 @@ if __name__ == "__main__":
     intel, market = get_intel()
     chart = generate_chart(intel['title'], market)
     post = generate_post(intel, market)
-    # UNCOMMENT THIS WHEN YOU ADD LINKEDIN KEYS
-    post_to_linkedin(post, chart) 
-    print(f"DONE: {post}")
+    post_to_linkedin(post, chart)
