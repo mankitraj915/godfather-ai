@@ -23,15 +23,16 @@ def get_model():
     except: pass
     return genai.GenerativeModel('gemini-1.5-flash')
 
-# --- CHANNEL 1: TECH & MARKETS ---
+# --- CHANNEL 1: TECH & POWER ---
 def get_tech_intel():
-    print("📡 CHANNEL: TECH...")
+    print("📡 CHANNEL: TECH & POWER...")
     intel = {"title": "The Stagnation of Software", "source": "Observation"}
     try:
-        top = requests.get("https://hacker-news.firebaseio.com/v0/topstories.json").json()[:10]
+        top = requests.get("https://hacker-news.firebaseio.com/v0/topstories.json").json()[:15]
         for id in top:
             s = requests.get(f"https://hacker-news.firebaseio.com/v0/item/{id}.json").json()
-            if any(k in s.get('title','').lower() for k in ['ai','gpu','nvidia','crypto','startup']):
+            # Expanded Keywords for Power & Tech
+            if any(k in s.get('title','').lower() for k in ['ai', 'gpu', 'nvidia', 'crypto', 'saas', 'startup', 'funding', 'silicon', 'china', 'chip']):
                 intel = {"title": s['title'], "source": "Hacker News"}
                 break
     except: pass
@@ -46,50 +47,67 @@ def get_tech_intel():
     except: pass
     return intel, market, "tech"
 
-# --- CHANNEL 2: PHILOSOPHY & PSYCHOLOGY ---
+# --- CHANNEL 2: THE PHILOSOPHICAL SPECTRUM ---
 def get_mind_intel():
-    print("📡 CHANNEL: MIND...")
+    print("📡 CHANNEL: OMNISCIENT MIND...")
     topics = [
-        "Jungian Shadow in AI", "Stoicism for Founders", "Vedantic Non-Dualism", 
-        "Nietzsche's Will to Power", "The Lacanian Mirror Stage", "Baudrillard's Hyperreality",
-        "Camus and The Absurd", "Girard's Mimetic Desire", "The Psychology of Flow", "Biocentrism"
+        # Power & Leadership
+        "The Shadow Self in Leadership (Jung)", "The Trap of Mimetic Desire (Girard)", 
+        "The Master-Slave Dialectic (Hegel)", "Machiavellian Virtue in Startups",
+        "The Sovereign Individual Thesis",
+        
+        # Reality & Existence
+        "The Simulation Hypothesis: Are We NPCs?", "Entropy: Why Order Always Fails",
+        "The Fermi Paradox: The Great Filter is Ahead of Us", "Determinism vs. Free Will",
+        "Panpsychism: Is the Universe Conscious?",
+        
+        # The Future
+        "Transhumanism: The End of Biological Evolution", 
+        "Accelerationism (e/acc) vs. Deceleration", "The Psychology of AGI Alignment"
     ]
     topic = random.choice(topics)
-    return {"title": topic, "source": "Internal Library"}, "Concept", "mind"
+    return {"title": topic, "source": "The Universal Library"}, "Concept", "mind"
 
-# --- CHANNEL 3: UNIVERSAL SCIENCE (Genetics, Neuro, CS, AI) ---
+# --- CHANNEL 3: THE HARD SCIENCE FRONTIER ---
 def get_science_intel():
-    print("📡 CHANNEL: SCIENCE...")
+    print("📡 CHANNEL: DEEP SCIENCE...")
     
-    # 🎲 THE ACADEMIC ROULETTE 🎲
+    # 🎲 THE EXPANDED ROSETTA STONE 🎲
     domains = {
-        "genetics": "cat:q-bio.GN",       # Genomics
-        "neuro": "cat:q-bio.NC",          # Neuroscience
+        # Biology & Life (The Immortality Pillar)
+        "genetics": "cat:q-bio.GN",       # Genomics / CRISPR
+        "neuro": "cat:q-bio.NC",          # Neuroscience / BCI
+        
+        # Intelligence (The God Pillar)
         "ai": "cat:cs.AI",                # Artificial Intelligence
         "ml": "cat:cs.LG",                # Machine Learning
-        "niche": "cat:cs.CY"              # Computers and Society (Viral/Niche)
+        
+        # Physics & Reality (The Truth Pillar)
+        "quantum": "cat:quant-ph",        # Quantum Physics
+        "complexity": "cat:nlin.AO",      # Complex Systems / Chaos Theory
+        
+        # Power & Math (The Control Pillar)
+        "game_theory": "cat:cs.GT",       # Computer Science Game Theory
+        "crypto": "cat:cs.CR"             # Cryptography / Security
     }
     
     domain_name, query_code = random.choice(list(domains.items()))
     print(f"   -> Domain Selected: {domain_name.upper()}")
 
     try:
-        # Fetch latest paper from ArXiv
-        url = f'http://export.arxiv.org/api/query?search_query={query_code}&start=0&max_results=5&sortBy=submittedDate&sortOrder=descending'
+        # Fetch high-impact papers
+        url = f'http://export.arxiv.org/api/query?search_query={query_code}&start=0&max_results=10&sortBy=submittedDate&sortOrder=descending'
         feed = feedparser.parse(url)
         entry = random.choice(feed.entries)
-        
-        # Clean title
-        title = entry.title.replace('\n', ' ')
-        return {"title": title, "source": f"ArXiv ({domain_name.upper()})"}, domain_name, "science"
+        return {"title": entry.title.replace('\n', ' '), "source": f"ArXiv ({domain_name.upper()})"}, domain_name, "science"
     except:
         return get_mind_intel() # Fallback
 
-# --- THE ARTIST (Adaptive Visuals) ---
+# --- THE ARTIST (Adaptive "Spectrum" Visuals) ---
 def generate_chart(mode, sub_mode):
     print("🎨 ARTIST: Painting...")
     plt.style.use('dark_background')
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(10, 10)) # Square for Mobile
     x = np.linspace(0, 10, 100)
     
     if mode == "tech":
@@ -105,20 +123,23 @@ def generate_chart(mode, sub_mode):
     elif mode == "science":
         # Adaptive Science Colors
         if sub_mode == "genetics": 
-            color = '#ff0055' # DNA Red
-            y = np.sin(x*3) + np.cos(x*3) # Double Helix-ish
+            color, y = '#ff0055', np.sin(x*3) + np.cos(x*3) # DNA Red
         elif sub_mode == "neuro":
-            color = '#00d0ff' # Electric Blue
-            y = np.random.normal(0, 0.5, 100) # Neural Spikes
-        else: # AI / CS
-            color = '#ff9900' # Amber Terminal
-            y = np.exp(0.3 * x) # Exponential Growth
+            color, y = '#00d0ff', np.random.normal(0, 0.5, 100) # Electric Blue
+        elif sub_mode == "quantum":
+            color, y = '#ffffff', np.sin(x**2) # White Interference
+        elif sub_mode in ["game_theory", "crypto"]:
+            color, y = '#ffff00', np.abs(np.sin(x*4)) # Logic Yellow
+        else: # AI / ML / Complexity
+            color, y = '#ff9900', np.exp(0.3 * x) # Amber Growth
             
     ax.plot(x, y, color=color, linewidth=8, alpha=0.3) # Glow
-    ax.plot(x, y, color=color, linewidth=2) # Core
+    ax.plot(x, y, color=color, linewidth=3) # Core
     
-    label = sub_mode if mode == "science" else "ANALYSIS"
-    ax.set_title(f"// SYSTEM OUTPUT: {label.upper()} //", color='white', fontname='monospace')
+    # Text Overlay
+    label = sub_mode.upper() if mode == "science" else sub_mode.upper() if mode == "tech" else "CONCEPT"
+    ax.text(5, 5, f"{label}", fontsize=20, color='white', ha='center', alpha=0.15, fontname='monospace', weight='bold')
+    ax.set_title(f"// GODFATHER ANALYTICS: {label} //", color='white', fontname='monospace')
     ax.axis('off')
     
     filename = "visual.png"
@@ -126,35 +147,51 @@ def generate_chart(mode, sub_mode):
     plt.close()
     return filename
 
-# --- THE NARRATOR ---
+# --- THE NARRATOR (TITAN MODE) ---
 def generate_post(intel, sub_mode, mode):
-    print("🧠 BRAIN: Thinking...")
+    print("🧠 BRAIN: Writing Manifesto...")
     model = get_model()
     
+    base_instructions = """
+    Write a LONG, high-status LinkedIn essay (1500-2000 chars).
+    Formatting: BOLD headers, bullet points, double spacing.
+    Tone: Intellectual, Visionary, 'Larger than Life'.
+    """
+
     if mode == "tech":
         prompt = f"""
-        Role: Cynical Tech Godfather.
-        Topic: "{intel['title']}" from {intel['source']}.
+        {base_instructions}
+        Role: Visionary Tech VC.
+        Topic: "{intel['title']}" ({intel['source']}).
         Context: Market is {sub_mode}.
-        Task: Write a LinkedIn post (max 500 chars). Connect news to power/money.
+        Structure:
+        1. THE HOOK: Contrarian take.
+        2. THE REALITY: Technical/Financial truth.
+        3. THE PREDICTION: 5-year outlook.
+        4. THE LESSON: Advice for builders.
         """
     elif mode == "mind":
         prompt = f"""
-        Role: Modern Philosopher.
+        {base_instructions}
+        Role: Philosopher King.
         Topic: "{intel['title']}".
-        Task: Write a LinkedIn post (max 500 chars). Apply this deep concept to modern work/life.
-        Tone: Mystical but actionable.
+        Structure:
+        1. THE PARADOX: Why this ancient concept explains modern failure.
+        2. THE MECHANISM: How it works psychologically.
+        3. THE APPLICATION: Apply to coding/leadership.
+        4. THE COMMAND: Final philosophical order.
         """
     else: # SCIENCE
         prompt = f"""
-        Role: R&D Director.
+        {base_instructions}
+        Role: Director of Future R&D.
         Paper: "{intel['title']}" (Source: {intel['source']}).
         Field: {sub_mode.upper()}.
-        Task: Write a LinkedIn post (max 500 chars). 
-        - If Genetics: Discuss modifying the source code of life.
-        - If Neuro: Discuss the hardware of the mind.
-        - If AI/ML: Discuss the optimization of intelligence.
-        Tone: Visionary, slightly dangerous excitement.
+        Structure:
+        1. THE BREAKTHROUGH: Explain the discovery simply but profoundly.
+        2. THE SHIFT: How this changes Biology/Physics/Compute.
+        3. THE FUTURE: Speculate on the massive implications (Utopia or Horror).
+        4. THE VERDICT: Hype or Standard?
         """
 
     return model.generate_content(prompt).text.strip()
@@ -179,12 +216,15 @@ def post_to_linkedin(text, image_path):
             "serviceRelationships": [{"relationshipType": "OWNER", "identifier": "urn:li:userGeneratedContent"}]
         }
     })
+    
+    if reg.status_code != 200: return print(f"❌ Image Error: {reg.text}")
+    
     upload_url = reg.json()['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']['uploadUrl']
     asset_urn = reg.json()['value']['asset']
     
     with open(image_path, 'rb') as f: requests.put(upload_url, headers={"Authorization": f"Bearer {LINKEDIN_TOKEN}"}, data=f)
 
-    requests.post("https://api.linkedin.com/v2/ugcPosts", headers=headers, json={
+    res = requests.post("https://api.linkedin.com/v2/ugcPosts", headers=headers, json={
         "author": urn,
         "lifecycleState": "PUBLISHED",
         "specificContent": {"com.linkedin.ugc.ShareContent": {
@@ -194,12 +234,14 @@ def post_to_linkedin(text, image_path):
         }},
         "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
     })
-    print("✅ GODFATHER HAS SPOKEN.")
+    
+    if res.status_code == 201: print("✅ GODFATHER HAS SPOKEN.")
+    else: print(f"❌ Post Error: {res.text}")
 
 # --- MAIN LOOP ---
 if __name__ == "__main__":
-    # 40% Chance Tech, 40% Chance Science, 20% Chance Philosophy
-    choice = random.choices(["tech", "science", "mind"], weights=[40, 40, 20], k=1)[0]
+    # Equal weight to ensure diversity across the spectrum
+    choice = random.choice(["tech", "mind", "science"])
     
     if choice == "tech": intel, extra, mode = get_tech_intel()
     elif choice == "mind": intel, extra, mode = get_mind_intel()
