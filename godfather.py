@@ -4,10 +4,9 @@ import random
 import requests
 import feedparser
 import yfinance as yf
-import google.generativeai as genai
 import matplotlib.pyplot as plt
 import numpy as np
-from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable, NotFound
+import json
 
 # --- CONFIGURATION: THE DECA-HYDRA (10 KEYS) ---
 KEYS = []
@@ -22,36 +21,57 @@ CURRENT_KEY_INDEX = 0
 LINKEDIN_TOKEN = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_ID = os.environ.get("LINKEDIN_USER_ID")
 
-# --- 0. THE ROTATING BRAIN (MODEL HUNTER) ---
-def get_working_model_and_key():
+# --- 0. THE BARE METAL ENGINE (Direct API Calls) ---
+def generate_text_bare_metal(prompt):
     global CURRENT_KEY_INDEX
-    if not VALID_KEYS: return None, None
-    
-    # ROTATE KEY
-    key = VALID_KEYS[CURRENT_KEY_INDEX]
-    genai.configure(api_key=key)
-    
-    # LIST OF MODELS TO TRY (In order of speed/quality)
-    # The code will try these one by one until it finds a survivor.
-    model_candidates = [
-        'gemini-1.5-flash',
-        'gemini-1.5-flash-001',
-        'gemini-1.5-flash-latest',
-        'gemini-1.5-pro',
-        'gemini-1.5-pro-latest',
-        'gemini-pro', 
-        'gemini-1.0-pro'
-    ]
-    
-    # Return the class, let the generation step handle the specific model string
-    # We will pick a specific model string dynamically in the generate function
-    return genai, model_candidates
+    if not VALID_KEYS: return None
 
-def rotate_key():
-    global CURRENT_KEY_INDEX
-    if len(VALID_KEYS) > 1:
-        CURRENT_KEY_INDEX = (CURRENT_KEY_INDEX + 1) % len(VALID_KEYS)
-        print(f"🔄 Switching to API Key #{CURRENT_KEY_INDEX + 1}...")
+    # List of models to hit directly (URL endpoints)
+    models = [
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-2.0-flash-exp"
+    ]
+
+    # Try up to 15 times (Keys * Models)
+    for attempt in range(15):
+        key = VALID_KEYS[CURRENT_KEY_INDEX]
+        
+        for model in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+            headers = {'Content-Type': 'application/json'}
+            data = {
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }]
+            }
+            
+            try:
+                # print(f"   ... Pinging {model} on Key #{CURRENT_KEY_INDEX+1}")
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+                
+                if response.status_code == 200:
+                    try:
+                        return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                    except:
+                        continue # Malformed response, try next
+                elif response.status_code == 429:
+                    print(f"⚠️ Key #{CURRENT_KEY_INDEX+1} Quota Exceeded (429).")
+                    break # Break inner loop to rotate key
+                else:
+                    # print(f"   ... Error {response.status_code}: {response.text[:100]}")
+                    continue # Try next model
+                    
+            except Exception as e:
+                continue
+
+        # If we broke out of the model loop, it means we need to rotate keys
+        if len(VALID_KEYS) > 1:
+            CURRENT_KEY_INDEX = (CURRENT_KEY_INDEX + 1) % len(VALID_KEYS)
+            print(f"🔄 Switching to API Key #{CURRENT_KEY_INDEX + 1}...")
+            time.sleep(1)
+            
+    return None
 
 # --- 1. DEPARTMENT OF PHILOSOPHY & PSYCHOANALYSIS ---
 def get_humanities_intel():
@@ -166,34 +186,8 @@ def generate_post(intel, sub_mode, mode):
     else: 
         prompt = f"""{base_instructions} Role: Technocrat VC. News: "{intel['title']}". Context: {sub_mode}. Analyze the second-order effects on power."""
 
-    # --- ROBUST TRY/CATCH LOOP ---
-    # We try up to 15 times (Keys * Models)
-    for attempt in range(15):
-        try:
-            client, candidates = get_working_model_and_key()
-            if not client: return None
-            
-            # INNER LOOP: Try every model name on the current key
-            for model_name in candidates:
-                try:
-                    print(f"   ... Trying model: {model_name}")
-                    model = client.GenerativeModel(model_name)
-                    response = model.generate_content(prompt)
-                    if response.text: 
-                        return response.text.strip() # SUCCESS!
-                except Exception as inner_e:
-                    # If model not found, try next model name silently
-                    continue 
-            
-            # If all models failed on this key, throw error to trigger key rotation
-            raise Exception("All models failed on this key")
-            
-        except (ResourceExhausted, ServiceUnavailable, Exception) as e:
-            print(f"⚠️ Key #{CURRENT_KEY_INDEX + 1} Failed. Rotating...")
-            rotate_key()
-            time.sleep(2)
-
-    return None
+    # USE BARE METAL ENGINE
+    return generate_text_bare_metal(prompt)
 
 # --- PUBLISHER ---
 def post_to_linkedin(text, image_path):
